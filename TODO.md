@@ -65,9 +65,9 @@ Passwordless by design decision — no password field on `User` at all, not just
 - [x] `User` — id, username, email (nullable, for guests), is_guest, balance, timestamps (no password field — passwordless by design, see Phase 3)
 - [x] `MagicLinkToken` — id, email, token, expires_at, used_at, created_at
 - [x] `ResourceDefinition` — id, key, name, category, base_value, rarity, icon, yield_amount, tradable
-- [ ] `InventoryItem` — id, user_id, resource_id, quantity, reserved_quantity, updated_at
+- [x] `InventoryItem` — id, user_id, resource_id, quantity, reserved_quantity, updated_at
 - [x] `MapNode` — id, user_id, node_key, resource_id, status, created_at (leaner than originally sketched: no per-user x/y or node_type — positions are computed client-side from a shared static edge template, since the map isn't procedurally generated yet)
-- [ ] `Mine` — id, user_id, map_node_id, resource_id, level, cycle_duration, storage_capacity, stored_quantity, last_collected_at, active
+- [x] `Mine` — id, user_id, map_node_id, resource_id, level, storage_capacity, stored_quantity, last_collected_at, created_at (`cycle_duration` and `active` dropped: cycle length is derived from `level` via a pure function instead of stored, and there's no "inactive mine" state yet)
 - [ ] `Recipe` / `RecipeInput` — output resource+qty, duration, machine_type, inputs
 - [ ] `ProductionJob` — id, user_id, recipe_id, quantity, started_at, completes_at, status
 - [ ] `MarketOrder` — id, user_id, resource_id, side (buy/sell), price, original/remaining_quantity, status, timestamps
@@ -100,20 +100,22 @@ Passwordless by design decision — no password field on `User` at all, not just
 
 ## Phase 7 — Mine production (timestamp-based, no per-mine loop)
 
-- [ ] On collect: elapsed time → completed cycles → apply storage cap → resolve fixed-chance rare drops server-side → update inventory → update last_collected_at → log rare drops → return summary
-- [ ] Server-authoritative time and RNG; client never supplies production/random values
-- [ ] Idempotent collection requests; max offline-accumulation cap
-- [ ] Tests: elapsed-time math, storage caps, rare-drop probabilities, repeated-collection idempotency
-- [ ] `POST /api/mines/{id}/collect`, `POST /api/mines/{id}/upgrade`, `GET /api/mines/{id}`
-- [ ] Upgrades affect speed/storage/common output only — never rare-drop chance
+- [x] Mine auto-created (level 1) when its node is unlocked
+- [x] On collect: elapsed time → completed cycles (capped at `mine_max_offline_hours`) → apply storage cap → credit inventory → advance `last_collected_at` by exactly the consumed cycles (not to `now`, so partial-cycle progress isn't lost) → return summary
+- [ ] Resolve fixed-chance rare drops server-side, log to `RareDropLog` — **not done**: rare-resource nodes (Charged Crystal, Prismatic Core) currently produce their `yield_amount` deterministically every cycle just like common resources. Real rare-drop-chance mechanics are a separate follow-up, not bundled into this pass
+- [x] Server-authoritative time; client never supplies production values
+- [x] Idempotent collection requests (calling `collect` twice in a row produces 0 the second time — verified via curl); max offline-accumulation cap (`mine_max_offline_hours`, default 24h)
+- [ ] Automated tests — verified manually via curl (elapsed-time math, idempotency, upgrade math, cross-user ownership 404s) but no Pytest suite yet; that's Phase 15
+- [x] `POST /api/mines/{id}/collect`, `POST /api/mines/{id}/upgrade`, `GET /api/mines/{id}` — plus `GET /api/mines` (list) and `mine_id` embedded in `GET /api/map` node entries, so the frontend doesn't need a second round-trip to find each node's mine
+- [x] Upgrades affect speed (`cycle_seconds`) and storage capacity only, never yield amount or rare-drop chance; free for now since there's no currency sink until the market exists (Phase 10)
 
 ## Phase 8 — Inventory
 
-- [ ] shadcn table/cards: icon, name, category, total/available/reserved qty
+- [ ] shadcn table/cards: icon, name, category, total/available/reserved qty — backend done, UI not built yet (this is a backend-only PR; frontend collect UI + inventory view is the next PR)
 - [ ] Filter by category, search by name, sort by qty/rarity
 - [ ] Link to recipes and market from item detail
-- [ ] `GET /api/inventory`
-- [ ] All mutations go through backend services + DB transactions — no direct writes from routes
+- [x] `GET /api/inventory`
+- [x] All mutations go through backend services + DB transactions — `credit_inventory()` in `inventory_service.py`, row-locked, no direct writes from routes
 
 ## Phase 9 — Factory production
 
