@@ -1,0 +1,22 @@
+# Node / Next.js
+node_modules/
+.next/
+next-env.d.ts
+npm-debug.log*
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Env
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
