@@ -70,12 +70,6 @@ export interface MineOut {
   last_collected_at: string;
 }
 
-export interface CollectResponse {
-  mine: MineOut;
-  collected: number;
-  cycles_completed: number;
-}
-
 export interface UpgradeResponse {
   mine: MineOut;
 }
@@ -124,7 +118,6 @@ export const api = {
   getMap: () => request<MapResponse>("/api/map"),
   unlockNode: (nodeKey: string) => request<UnlockResponse>(`/api/map/nodes/${nodeKey}/unlock`, { method: "POST" }),
   getMines: () => request<MineOut[]>("/api/mines"),
-  collectMine: (mineId: number) => request<CollectResponse>(`/api/mines/${mineId}/collect`, { method: "POST" }),
   upgradeMine: (mineId: number) => request<UpgradeResponse>(`/api/mines/${mineId}/upgrade`, { method: "POST" }),
   getInventory: () => request<InventoryResponse>("/api/inventory"),
 };

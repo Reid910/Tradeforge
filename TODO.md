@@ -18,8 +18,8 @@ No Redis in v1. Only add it if cross-process WS broadcast, caching, distributed 
 - [x] Register / log in
 - [x] View generated node map
 - [x] Unlock a mining node
-- [x] Collect resources from a mine
-- [x] Upgrade mine extraction speed (backend + click-to-collect UI; no dedicated upgrade button yet, upgrade endpoint exists but isn't wired to a UI control)
+- [x] Collect resources from a mine — fully automatic, no click required (see Phase 7)
+- [x] Upgrade mine output (backend endpoint exists and works; no dedicated upgrade button in the UI yet)
 - [ ] Process raw materials → intermediates
 - [ ] Manufacture a finished product
 - [ ] List materials/products on the market
@@ -88,30 +88,36 @@ Passwordless by design decision — no password field on `User` at all, not just
   - Steel + Copper Wire → Electric Motor
   - Steel + Electric Motor → Mining Drill
   - Copper Wire + Glass + Charged Crystal → Control Module
-- [ ] Mining Drills feed back into mine-speed upgrades (closes the loop)
+- [ ] Mining Drills feed back into mine upgrades (closes the loop)
 
 ## Phase 6 — Node map
 
-- [x] React Flow map: locked / discovered / unlocked states, resource, yield — mine level/production-rate/stored-resources wait on Phase 7 (mines don't exist yet)
+- [x] React Flow map: locked / discovered / unlocked states, resource, yield. Design call after Phase 7 landed: this page stays discovery/unlock-only on purpose — mine level, production, and stored amounts are deliberately **not** shown here, since production is fully automatic and belongs on the Inventory page instead. `mine_id` is still embedded in each node for a possible future upgrade button on this page
 - [x] Hover node → details panel (design call: hover instead of click, click is reserved for unlocking); unlock only adjacent, discovered nodes
 - [ ] Server-generated, deterministic per map seed; positions persisted — currently one shared static template seeded per-user at registration, positions computed client-side (radial layout), not stored. Revisit if/when maps need to differ per player
 - [x] Scope: 10–15 nodes, 4 common resources, 1–2 rare nodes, 1 starting node, a few branches
 - [x] `GET /api/map`, `POST /api/map/nodes/{id}/unlock` — no separate `GET /api/map/nodes/{id}`, not needed since the full map response already includes every node
 
-## Phase 7 — Mine production (timestamp-based, no per-mine loop)
+## Phase 7 — Mine production (timestamp-based, no per-mine loop, fully automatic)
 
-- [x] Mine auto-created (level 1) when its node is unlocked
-- [x] On collect: elapsed time → completed cycles (capped at `mine_max_offline_hours`) → apply storage cap → credit inventory → advance `last_collected_at` by exactly the consumed cycles (not to `now`, so partial-cycle progress isn't lost) → return summary
-- [ ] Resolve fixed-chance rare drops server-side, log to `RareDropLog` — **not done**: rare-resource nodes (Charged Crystal, Prismatic Core) currently produce their `yield_amount` deterministically every cycle just like common resources. Real rare-drop-chance mechanics are a separate follow-up, not bundled into this pass
+Design call: no click-to-collect anywhere. Production piles up on its own and lands directly in inventory — the node map's job is purely discovery/unlocking (see Phase 6), not a place to watch numbers tick. All mines share **one global tick grid** rather than each running its own clock, so everything advances in lockstep instead of drifting out of phase depending on when each mine was created.
+
+- [x] Mine auto-created (level 1) when its node is unlocked, snapped onto the shared tick grid at creation (`mine_service._tick_boundary`) so it's in sync with every other mine from the start
+- [x] **No collect endpoint.** Instead, `GET /api/map`, `GET /api/mines(/{id})`, and `GET /api/inventory` all depend on `get_current_user_settled` (`api/deps.py`), which auto-credits any production accrued since the user was last seen before the route even runs. This is a deliberate, documented departure from strict REST semantics (a GET has a side effect) in exchange for needing zero background worker and zero player-facing button
+- [x] Settlement: whole ticks elapsed since last settle (capped at `mine_max_offline_hours`) → `ticks × yield_amount × level`, storage-capped → credited straight to inventory → `last_collected_at` snapped to the current tick boundary
+- [ ] Resolve fixed-chance rare drops server-side, log to `RareDropLog` — **not done**: rare-resource nodes (Charged Crystal, Prismatic Core) currently produce deterministically every tick just like common resources. Real rare-drop-chance mechanics are a separate follow-up
 - [x] Server-authoritative time; client never supplies production values
-- [x] Idempotent collection requests (calling `collect` twice in a row produces 0 the second time — verified via curl); max offline-accumulation cap (`mine_max_offline_hours`, default 24h)
-- [ ] Automated tests — verified manually via curl (elapsed-time math, idempotency, upgrade math, cross-user ownership 404s) but no Pytest suite yet; that's Phase 15
-- [x] `POST /api/mines/{id}/collect`, `POST /api/mines/{id}/upgrade`, `GET /api/mines/{id}` — plus `GET /api/mines` (list) and `mine_id` embedded in `GET /api/map` node entries, so the frontend doesn't need a second round-trip to find each node's mine
-- [x] Upgrades affect speed (`cycle_seconds`) and storage capacity only, never yield amount or rare-drop chance; free for now since there's no currency sink until the market exists (Phase 10)
+- [x] Idempotent by construction (settling twice in a row with no elapsed tick credits nothing the second time); max offline-accumulation cap (`mine_max_offline_hours`, default 24h)
+- [ ] Automated tests — verified manually via curl (tick math, cross-mine sync with mines created seconds apart, offline cap, cross-user ownership 404s) but no Pytest suite yet; that's Phase 15
+- [x] `POST /api/mines/{id}/upgrade`, `GET /api/mines/{id}`, `GET /api/mines` (list), `mine_id` embedded in `GET /api/map` node entries for future upgrade UI on the map page
+- [x] Upgrades increase output-per-tick and storage capacity — **never** tick speed (that's shared/fixed for everyone) and never rare-drop chance; free for now since there's no currency sink until the market exists (Phase 10)
 
 ## Phase 8 — Inventory
 
+This is where automation actually surfaces to the player — "how much have I collected," full stop.
+
 - [x] Basic table: icon, name, category, quantity, reserved qty — plain Tailwind for now, not shadcn/ui yet (that's Phase 13, once the rest of the app shell gets built)
+- [x] Polls every 6s (matching the backend tick) so totals visibly climb while sitting on the page, with zero action from the player
 - [ ] Filter by category, search by name, sort by qty/rarity
 - [ ] Link to recipes and market from item detail
 - [x] `GET /api/inventory`

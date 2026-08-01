@@ -22,6 +22,10 @@ export default function InventoryPage() {
     queryKey: ["inventory"],
     queryFn: api.getInventory,
     enabled: !!user,
+    // Matches the backend's mine tick length (settings.mine_tick_seconds) so
+    // totals visibly climb while sitting on this page - production is fully
+    // automatic, this is just how the UI notices it happened.
+    refetchInterval: 6000,
   });
 
   if (authLoading || !user) {

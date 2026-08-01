@@ -1,8 +1,7 @@
 "use client";
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import type { FlowNodeData } from "@/components/NodeMap";
-import { estimateStored } from "@/lib/mineProjection";
+import type { MapNodeOut } from "@/lib/api";
 
 // Handles are pinned to the node's center (overriding React Flow's default
 // edge placement) so radial edges connect center-to-center and disappear
@@ -20,21 +19,17 @@ const centeredHandleStyle: React.CSSProperties = {
   opacity: 0,
 };
 
-const CIRCLE_STYLES: Record<FlowNodeData["status"], string> = {
+const CIRCLE_STYLES: Record<MapNodeOut["status"], string> = {
   unlocked: "border-forge-accent bg-forge-panel shadow-[0_0_16px_-2px_rgba(224,163,57,0.55)]",
   discovered: "border-dashed border-slate-500 bg-forge-panel hover:border-forge-accent/70",
   locked: "border-forge-border bg-[#0f1114] grayscale opacity-50",
 };
 
-export default function MineNode({ data }: NodeProps & { data: FlowNodeData }) {
+export default function MineNode({ data }: NodeProps & { data: MapNodeOut }) {
   const resource = data.resource;
   const isHub = !resource;
   const isRare = resource?.rarity === "rare";
   const size = isHub ? "h-20 w-20" : "h-16 w-16";
-
-  const mine = data.mine;
-  const displayAmount = mine ? estimateStored(mine, data.now) : resource?.yield_amount;
-  const isReadyToCollect = mine ? displayAmount === mine.storage_capacity && displayAmount > 0 : false;
 
   return (
     <div className={`relative flex items-center justify-center ${size}`}>
@@ -46,9 +41,6 @@ export default function MineNode({ data }: NodeProps & { data: FlowNodeData }) {
       )}
       {data.status === "discovered" && (
         <span className="absolute -inset-1 animate-pulse rounded-full border border-slate-500/50" />
-      )}
-      {isReadyToCollect && (
-        <span className="absolute -inset-1 animate-pulse rounded-full border-2 border-forge-accent" />
       )}
 
       <div
@@ -69,7 +61,7 @@ export default function MineNode({ data }: NodeProps & { data: FlowNodeData }) {
             data.status === "unlocked" ? "bg-forge-accent text-forge-bg" : "bg-forge-border/70 text-slate-500"
           }`}
         >
-          {displayAmount}
+          {resource?.yield_amount}
         </span>
       )}
     </div>
