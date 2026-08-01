@@ -3,9 +3,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.map_node import MapNode
+from app.models.mine import Mine
 from app.models.resource import ResourceDefinition
 from app.schemas.map import MapEdgeOut, MapNodeOut, MapResponse, ResourceOut
 from app.services import map_template
+from app.services.mine_service import create_mine
 
 
 def seed_user_map(db: Session, user_id: int) -> None:
@@ -40,12 +42,16 @@ def seed_user_map(db: Session, user_id: int) -> None:
 
 def get_user_map(db: Session, user_id: int) -> MapResponse:
     rows = db.query(MapNode).filter(MapNode.user_id == user_id).all()
+    mine_id_by_node = dict(
+        db.execute(select(Mine.map_node_id, Mine.id).where(Mine.user_id == user_id)).all()
+    )
 
     nodes = [
         MapNodeOut(
             node_key=row.node_key,
             status=row.status,
             resource=ResourceOut.model_validate(row.resource) if row.resource_id else None,
+            mine_id=mine_id_by_node.get(row.id),
         )
         for row in rows
     ]
@@ -73,6 +79,9 @@ def unlock_node(db: Session, user_id: int, node_key: str) -> tuple[str, list[str
         )
 
     target.status = "unlocked"
+
+    if target.resource_id is not None:
+        create_mine(db, user_id, target.id, target.resource_id)
 
     child_keys = map_template.children_of(node_key)
     newly_discovered: list[str] = []

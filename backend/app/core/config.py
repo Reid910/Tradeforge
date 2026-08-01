@@ -23,6 +23,16 @@ class Settings(BaseSettings):
     magic_link_expire_minutes: int = 15
     frontend_url: str = "http://localhost:3100"
 
+    # Mine production tuning. Short cycles/caps on purpose - this is a portfolio
+    # demo, not a real idle game, so progress should be visible within seconds.
+    mine_base_cycle_seconds: int = 6
+    mine_cycle_reduction_per_level: int = 1
+    mine_min_cycle_seconds: int = 2
+    mine_base_storage: int = 20
+    mine_storage_per_level: int = 10
+    mine_max_level: int = 10
+    mine_max_offline_hours: int = 24
+
     @property
     def cookie_secure(self) -> bool:
         return self.environment == "production"

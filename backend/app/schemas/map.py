@@ -19,6 +19,7 @@ class MapNodeOut(BaseModel):
     node_key: str
     status: str
     resource: ResourceOut | None
+    mine_id: int | None = None
 
 
 class MapEdgeOut(BaseModel):
