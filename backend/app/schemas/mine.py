@@ -18,11 +18,5 @@ class MineOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class CollectResponse(BaseModel):
-    mine: MineOut
-    collected: int
-    cycles_completed: int
-
-
 class UpgradeResponse(BaseModel):
     mine: MineOut

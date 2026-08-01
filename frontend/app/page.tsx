@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -37,6 +38,9 @@ export default function Home() {
           TRADEFORGE <span className="text-slate-500">/ mining map</span>
         </h1>
         <div className="flex items-center gap-4">
+          <Link href="/inventory" className="text-xs text-slate-400 hover:text-slate-200">
+            Inventory
+          </Link>
           <BackendStatus />
           <span className="text-xs text-slate-400">
             {user.username}
