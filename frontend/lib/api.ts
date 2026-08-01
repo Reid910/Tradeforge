@@ -27,6 +27,7 @@ export interface MapNodeOut {
   node_key: string;
   status: NodeStatus;
   resource: ResourceOut | null;
+  mine_id: number | null;
 }
 
 export interface MapEdgeOut {
@@ -56,6 +57,38 @@ export interface UserOut {
 export interface MagicLinkRequestResponse {
   message: string;
   dev_magic_link: string | null;
+}
+
+export interface MineOut {
+  id: number;
+  map_node_id: number;
+  resource: ResourceOut;
+  level: number;
+  storage_capacity: number;
+  stored_quantity: number;
+  cycle_seconds: number;
+  last_collected_at: string;
+}
+
+export interface CollectResponse {
+  mine: MineOut;
+  collected: number;
+  cycles_completed: number;
+}
+
+export interface UpgradeResponse {
+  mine: MineOut;
+}
+
+export interface InventoryItemOut {
+  resource: ResourceOut;
+  quantity: number;
+  reserved_quantity: number;
+  updated_at: string;
+}
+
+export interface InventoryResponse {
+  items: InventoryItemOut[];
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -90,4 +123,8 @@ export const api = {
   me: () => request<UserOut>("/api/auth/me"),
   getMap: () => request<MapResponse>("/api/map"),
   unlockNode: (nodeKey: string) => request<UnlockResponse>(`/api/map/nodes/${nodeKey}/unlock`, { method: "POST" }),
+  getMines: () => request<MineOut[]>("/api/mines"),
+  collectMine: (mineId: number) => request<CollectResponse>(`/api/mines/${mineId}/collect`, { method: "POST" }),
+  upgradeMine: (mineId: number) => request<UpgradeResponse>(`/api/mines/${mineId}/upgrade`, { method: "POST" }),
+  getInventory: () => request<InventoryResponse>("/api/inventory"),
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ReactFlow,
@@ -15,21 +15,33 @@ import "@xyflow/react/dist/style.css";
 
 import MineNode from "@/components/MineNode";
 import { computeRadialLayout, type Point } from "@/lib/mapLayout";
-import { api, type MapEdgeOut, type MapNodeOut } from "@/lib/api";
+import { estimateStored } from "@/lib/mineProjection";
+import { api, type MapEdgeOut, type MapNodeOut, type MineOut } from "@/lib/api";
+
+export interface FlowNodeData extends MapNodeOut {
+  mine: MineOut | null;
+  now: number;
+}
 
 const nodeTypes = { mine: MineNode };
 const ROOT_KEY = "start";
 // Stable empty-array references so useMemo deps don't churn every render
-// while the map query is loading/errored.
+// while the map/mines queries are loading/errored.
 const EMPTY_NODES: MapNodeOut[] = [];
 const EMPTY_EDGES: MapEdgeOut[] = [];
+const EMPTY_MINES: MineOut[] = [];
 
-function toFlowNodes(nodes: MapNodeOut[], layout: Record<string, Point>): Node[] {
+function toFlowNodes(
+  nodes: MapNodeOut[],
+  layout: Record<string, Point>,
+  minesById: Record<number, MineOut>,
+  now: number,
+): Node[] {
   return nodes.map((n) => ({
     id: n.node_key,
     type: "mine",
     position: layout[n.node_key] ?? { x: 0, y: 0 },
-    data: n,
+    data: { ...n, mine: n.mine_id ? (minesById[n.mine_id] ?? null) : null, now } satisfies FlowNodeData,
     draggable: false,
   }));
 }
@@ -60,19 +72,41 @@ function neighborsOf(nodeKey: string, edges: MapEdgeOut[]): string[] {
 export default function NodeMap() {
   const queryClient = useQueryClient();
   const { data, isLoading, isError } = useQuery({ queryKey: ["map"], queryFn: api.getMap });
+  const { data: mines } = useQuery({ queryKey: ["mines"], queryFn: api.getMines });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  // Drives the live "pending amount" projection shown on mine nodes between
+  // collects - purely cosmetic, doesn't touch the server.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const unlockMutation = useMutation({
     mutationFn: (nodeKey: string) => api.unlockNode(nodeKey),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["map"] }),
   });
 
+  const collectMutation = useMutation({
+    mutationFn: (mineId: number) => api.collectMine(mineId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mines"] });
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    },
+  });
+
   const nodes = data?.nodes ?? EMPTY_NODES;
   const edges = data?.edges ?? EMPTY_EDGES;
+  const minesList = mines ?? EMPTY_MINES;
 
   const nodesByKey = useMemo(() => Object.fromEntries(nodes.map((n) => [n.node_key, n])), [nodes]);
+  const minesById = useMemo(() => Object.fromEntries(minesList.map((m) => [m.id, m])), [minesList]);
   const layout = useMemo(() => computeRadialLayout(edges, ROOT_KEY), [edges]);
-  const flowNodes = useMemo(() => toFlowNodes(nodes, layout), [nodes, layout]);
+  const flowNodes = useMemo(
+    () => toFlowNodes(nodes, layout, minesById, now),
+    [nodes, layout, minesById, now],
+  );
   const flowEdges = useMemo(() => toFlowEdges(edges, nodesByKey), [edges, nodesByKey]);
 
   const handleNodeMouseEnter = useCallback<NodeMouseHandler>((_event, node) => {
@@ -82,14 +116,18 @@ export default function NodeMap() {
   const handleNodeClick = useCallback<NodeMouseHandler>(
     (_event, node) => {
       const target = nodesByKey[node.id];
-      if (target?.status === "discovered") {
+      if (!target) return;
+      if (target.status === "discovered") {
         unlockMutation.mutate(node.id);
+      } else if (target.status === "unlocked" && target.mine_id) {
+        collectMutation.mutate(target.mine_id);
       }
     },
-    [nodesByKey, unlockMutation],
+    [nodesByKey, unlockMutation, collectMutation],
   );
 
   const hovered = hoveredId ? nodesByKey[hoveredId] : null;
+  const hoveredMine = hovered?.mine_id ? minesById[hovered.mine_id] : null;
   const labelFor = useCallback(
     (key: string) => nodesByKey[key]?.resource?.name ?? "Home Base",
     [nodesByKey],
@@ -144,6 +182,25 @@ export default function NodeMap() {
                 <dt>Yield</dt>
                 <dd className="text-forge-accent">{hovered.resource.yield_amount}/cycle</dd>
               </div>
+            )}
+            {hoveredMine && (
+              <>
+                <div className="flex justify-between">
+                  <dt>Level</dt>
+                  <dd className="text-slate-200">{hoveredMine.level}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Stored</dt>
+                  <dd className="text-slate-200">
+                    {estimateStored(hoveredMine, now)} / {hoveredMine.storage_capacity}
+                  </dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Cycle</dt>
+                  <dd className="text-slate-200">{hoveredMine.cycle_seconds}s</dd>
+                </div>
+                <p className="pt-1 text-[11px] text-slate-500">Click the node to collect</p>
+              </>
             )}
             <div className="flex justify-between gap-2">
               <dt className="shrink-0">Connects to</dt>

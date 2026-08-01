@@ -18,8 +18,8 @@ No Redis in v1. Only add it if cross-process WS broadcast, caching, distributed 
 - [x] Register / log in
 - [x] View generated node map
 - [x] Unlock a mining node
-- [ ] Collect resources from a mine
-- [ ] Upgrade mine extraction speed
+- [x] Collect resources from a mine
+- [x] Upgrade mine extraction speed (backend + click-to-collect UI; no dedicated upgrade button yet, upgrade endpoint exists but isn't wired to a UI control)
 - [ ] Process raw materials → intermediates
 - [ ] Manufacture a finished product
 - [ ] List materials/products on the market
@@ -111,7 +111,7 @@ Passwordless by design decision — no password field on `User` at all, not just
 
 ## Phase 8 — Inventory
 
-- [ ] shadcn table/cards: icon, name, category, total/available/reserved qty — backend done, UI not built yet (this is a backend-only PR; frontend collect UI + inventory view is the next PR)
+- [x] Basic table: icon, name, category, quantity, reserved qty — plain Tailwind for now, not shadcn/ui yet (that's Phase 13, once the rest of the app shell gets built)
 - [ ] Filter by category, search by name, sort by qty/rarity
 - [ ] Link to recipes and market from item detail
 - [x] `GET /api/inventory`
