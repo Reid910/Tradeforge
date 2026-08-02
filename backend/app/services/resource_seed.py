@@ -9,6 +9,9 @@ RESOURCE_SEED = [
     dict(key="silica", name="Silica", category="raw", icon="🏜", base_value="4", yield_amount=2, rarity="common"),
     dict(key="charged_crystal", name="Charged Crystal", category="rare", icon="💎", base_value="50", yield_amount=1, rarity="rare"),
     dict(key="prismatic_core", name="Prismatic Core", category="rare", icon="🔮", base_value="120", yield_amount=1, rarity="rare"),
+    # Intermediate/factory-produced resources. yield_amount is unused here -
+    # it only means something for resources tied to a mine node.
+    dict(key="copper_ingot", name="Copper Ingot", category="intermediate", icon="🧱", base_value="18", yield_amount=1, rarity="common"),
 ]
 
 

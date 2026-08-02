@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
+from app.services.factory_service import settle_all_factories
 from app.services.mine_service import settle_all_mines
 
 
@@ -30,10 +31,11 @@ def get_current_user_settled(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> User:
-    """Same as get_current_user, but also auto-credits any mine production
-    that's accrued since the user was last seen. Used by routes that touch
-    mines/map/inventory so accrual happens passively instead of via a
-    dedicated collect action.
+    """Same as get_current_user, but also auto-credits any mine and factory
+    production that's accrued since the user was last seen. Used by routes
+    that touch mines/map/inventory/factory so accrual happens passively
+    instead of via a dedicated collect action.
     """
     settle_all_mines(db, current_user.id)
+    settle_all_factories(db, current_user.id)
     return current_user

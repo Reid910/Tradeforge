@@ -23,16 +23,23 @@ class Settings(BaseSettings):
     magic_link_expire_minutes: int = 15
     frontend_url: str = "http://localhost:3100"
 
-    # Mine production tuning. Short tick/caps on purpose - this is a portfolio
-    # demo, not a real idle game, so progress should be visible within seconds.
-    # Every mine settles against the same shared tick grid (see
-    # mine_service._tick_boundary) so all production stays in lockstep -
-    # upgrades increase output-per-tick and storage, never tick speed.
-    mine_tick_seconds: int = 6
+    # Production tuning shared by mines and the factory. Short tick/caps on
+    # purpose - this is a portfolio demo, not a real idle game, so progress
+    # should be visible within seconds. Everything that produces (mines,
+    # factory chains) settles against the same shared tick grid (see
+    # core/ticks.py) so all production stays in lockstep - upgrades increase
+    # output-per-tick and storage/capacity, never tick speed.
+    tick_seconds: int = 6
+    max_offline_hours: int = 24
+
     mine_base_storage: int = 20
     mine_storage_per_level: int = 10
     mine_max_level: int = 10
-    mine_max_offline_hours: int = 24
+
+    factory_grid_width: int = 5
+    factory_grid_height: int = 5
+    factory_grid_unlock_cost_resource_key: str = "iron_ore"
+    factory_grid_unlock_cost_amount: int = 50
 
     @property
     def cookie_secure(self) -> bool:
