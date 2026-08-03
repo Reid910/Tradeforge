@@ -4,12 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.factory import router as factory_router
 from app.api.inventory import router as inventory_router
 from app.api.map import router as map_router
 from app.api.mines import router as mines_router
 from app.api.system import router as system_router
 from app.core.config import settings
 from app.db.session import SessionLocal
+from app.services.machine_seed import seed_machine_definitions
 from app.services.resource_seed import seed_resources
 
 
@@ -18,6 +20,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         seed_resources(db)
+        seed_machine_definitions(db)
     finally:
         db.close()
     yield
@@ -38,3 +41,4 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(map_router, prefix="/api")
 app.include_router(mines_router, prefix="/api")
 app.include_router(inventory_router, prefix="/api")
+app.include_router(factory_router, prefix="/api")

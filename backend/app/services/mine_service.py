@@ -5,20 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.ticks import tick_boundary
 from app.models.mine import Mine
 from app.schemas.mine import MineOut
 from app.services.inventory_service import credit_inventory
-
-
-def _tick_boundary(dt: datetime) -> datetime:
-    """Floor a timestamp down to the shared global tick grid. Every mine
-    settles against this same grid (not its own private clock), so
-    production across all mines stays in lockstep instead of drifting out
-    of phase with each other based on when each was created.
-    """
-    epoch_seconds = dt.timestamp()
-    floored = (epoch_seconds // settings.mine_tick_seconds) * settings.mine_tick_seconds
-    return datetime.fromtimestamp(floored, tz=timezone.utc)
 
 
 def storage_capacity_for_level(level: int) -> int:
@@ -35,7 +25,7 @@ def create_mine(db: Session, user_id: int, map_node_id: int, resource_id: int) -
         stored_quantity=0,
         # Snap onto the shared tick grid immediately so this mine is in sync
         # with every other mine from the moment it's created.
-        last_collected_at=_tick_boundary(datetime.now(timezone.utc)),
+        last_collected_at=tick_boundary(datetime.now(timezone.utc)),
     )
     db.add(mine)
     db.flush()
@@ -50,7 +40,7 @@ def mine_to_out(mine: Mine) -> MineOut:
         level=mine.level,
         storage_capacity=mine.storage_capacity,
         stored_quantity=mine.stored_quantity,
-        cycle_seconds=settings.mine_tick_seconds,
+        cycle_seconds=settings.tick_seconds,
         last_collected_at=mine.last_collected_at,
     )
 
@@ -68,14 +58,14 @@ def _completed_ticks(mine: Mine, now: datetime) -> int:
     """Whole shared ticks passed since this mine's last settle, capped
     against offline farming.
     """
-    max_elapsed = timedelta(hours=settings.mine_max_offline_hours)
+    max_elapsed = timedelta(hours=settings.max_offline_hours)
     effective_last = max(mine.last_collected_at, now - max_elapsed)
 
-    now_boundary = _tick_boundary(now)
-    last_boundary = _tick_boundary(effective_last)
+    now_boundary = tick_boundary(now)
+    last_boundary = tick_boundary(effective_last)
     if now_boundary <= last_boundary:
         return 0
-    return int((now_boundary - last_boundary).total_seconds() // settings.mine_tick_seconds)
+    return int((now_boundary - last_boundary).total_seconds() // settings.tick_seconds)
 
 
 def _settle(db: Session, mine: Mine, now: datetime) -> int:
@@ -87,7 +77,7 @@ def _settle(db: Session, mine: Mine, now: datetime) -> int:
     if ticks > 0:
         produced = ticks * mine.resource.yield_amount * mine.level
         mine.stored_quantity = min(mine.stored_quantity + produced, mine.storage_capacity)
-        mine.last_collected_at = _tick_boundary(now)
+        mine.last_collected_at = tick_boundary(now)
 
     banked = mine.stored_quantity
     if banked > 0:
