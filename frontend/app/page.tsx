@@ -34,13 +34,18 @@ export default function Home() {
   return (
     <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b border-forge-border bg-forge-panel px-4 py-3">
-        <h1 className="text-sm font-semibold tracking-wide text-slate-100">
-          TRADEFORGE <span className="text-slate-500">/ mining map</span>
-        </h1>
         <div className="flex items-center gap-4">
-          <Link href="/inventory" className="text-xs text-slate-400 hover:text-slate-200">
+          <h1 className="text-sm font-semibold tracking-wide text-slate-100">
+            TRADEFORGE <span className="text-slate-500">/ mining map</span>
+          </h1>
+          <Link
+            href="/inventory"
+            className="rounded-md px-2 py-1 text-xs font-medium text-slate-300 hover:bg-forge-border/50 hover:text-slate-100"
+          >
             Inventory
           </Link>
+        </div>
+        <div className="flex items-center gap-4">
           <BackendStatus />
           <span className="text-xs text-slate-400">
             {user.username}
