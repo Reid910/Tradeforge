@@ -96,8 +96,11 @@ export default function FactoryCanvas({
               armed: !!armedKey,
               onPlace: (px: number, py: number) => placeMutation.mutate({ x: px, y: py }),
             } satisfies EmptyCellNodeData,
+            // Not selectable: false here on purpose - React Flow appears to
+            // mark non-selectable, non-draggable nodes as fully inert
+            // (pointer-events: none on the wrapper), which silently ate all
+            // hover/click on the button inside, not just drag/selection.
             draggable: false,
-            selectable: false,
           });
         }
       }
