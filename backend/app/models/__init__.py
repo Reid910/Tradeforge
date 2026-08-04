@@ -1,7 +1,5 @@
-from app.models.factory_grid import FactoryGrid
 from app.models.inventory_item import InventoryItem
 from app.models.machine import Machine
-from app.models.machine_connection import MachineConnection
 from app.models.machine_definition import MachineDefinition, MachineDefinitionInput
 from app.models.magic_link_token import MagicLinkToken
 from app.models.map_node import MapNode
@@ -16,9 +14,7 @@ __all__ = [
     "MagicLinkToken",
     "Mine",
     "InventoryItem",
-    "FactoryGrid",
     "MachineDefinition",
     "MachineDefinitionInput",
     "Machine",
-    "MachineConnection",
 ]

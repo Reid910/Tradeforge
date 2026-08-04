@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from app.core.security import generate_token
 from app.models.magic_link_token import MagicLinkToken
 from app.models.user import User
-from app.services.factory_service import seed_first_grid
 from app.services.map_service import seed_user_map
 
 
@@ -58,7 +57,6 @@ def confirm_magic_link(db: Session, token_value: str) -> User:
 
     if is_new_user:
         seed_user_map(db, user.id)
-        seed_first_grid(db, user.id)
 
     return user
 
@@ -71,5 +69,4 @@ def create_guest_user(db: Session) -> User:
     db.refresh(user)
 
     seed_user_map(db, user.id)
-    seed_first_grid(db, user.id)
     return user

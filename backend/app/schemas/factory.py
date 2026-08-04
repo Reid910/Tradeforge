@@ -19,37 +19,9 @@ class MachineDefinitionOut(BaseModel):
 
 class MachineOut(BaseModel):
     id: int
-    grid_id: int
     definition: MachineDefinitionOut
-    x: int
-    y: int
+    active: bool
 
 
-class MachineConnectionOut(BaseModel):
-    id: int
-    source_machine_id: int
-    target_machine_id: int
-
-
-class FactoryGridOut(BaseModel):
-    id: int
-    slot_index: int
-    width: int
-    height: int
-    machines: list[MachineOut]
-    connections: list[MachineConnectionOut]
-
-
-class PlaceMachineRequest(BaseModel):
+class CreateMachineRequest(BaseModel):
     machine_definition_key: str
-    x: int
-    y: int
-
-
-class ConnectRequest(BaseModel):
-    source_machine_id: int
-    target_machine_id: int
-
-
-class UnlockGridResponse(BaseModel):
-    grid: FactoryGridOut
