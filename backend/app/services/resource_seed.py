@@ -12,6 +12,7 @@ RESOURCE_SEED = [
     # Intermediate/factory-produced resources. yield_amount is unused here -
     # it only means something for resources tied to a mine node.
     dict(key="copper_ingot", name="Copper Ingot", category="intermediate", icon="🧱", base_value="18", yield_amount=1, rarity="common"),
+    dict(key="copper_plate", name="Copper Plate", category="finished", icon="🟫", base_value="45", yield_amount=1, rarity="common"),
 ]
 
 

@@ -13,6 +13,17 @@ MACHINE_SEED = [
         output_amount=1,
         inputs=[("copper_ore", 1), ("coal", 1)],
     ),
+    dict(
+        key="press",
+        name="Press",
+        icon="🛠",
+        output_key="copper_plate",
+        output_amount=1,
+        # Machines in a chain run in lockstep (no buffering between them),
+        # so this must be <= the upstream Furnace's 1x output per run, or
+        # the chain could never produce anything.
+        inputs=[("copper_ingot", 1)],
+    ),
 ]
 
 

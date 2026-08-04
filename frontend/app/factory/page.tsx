@@ -4,10 +4,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import FactoryCanvas from "@/components/factory/FactoryCanvas";
-import MachinePalette from "@/components/factory/MachinePalette";
 import Nav from "@/components/Nav";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, type MachineOut } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
 
 export default function FactoryPage() {
@@ -21,9 +19,7 @@ export default function FactoryPage() {
     }
   }, [authLoading, authError, user, router]);
 
-  const [armedKey, setArmedKey] = useState<string | null>(null);
-  const [selectedGridId, setSelectedGridId] = useState<number | null>(null);
-  const [unlockError, setUnlockError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: definitions } = useQuery({
     queryKey: ["machine-definitions"],
@@ -31,22 +27,39 @@ export default function FactoryPage() {
     enabled: !!user,
   });
 
-  const { data: grids, isLoading: gridsLoading, isError: gridsError } = useQuery({
-    queryKey: ["factory-grids"],
-    queryFn: api.getFactoryGrids,
+  const { data: machines, isLoading: machinesLoading, isError: machinesError } = useQuery({
+    queryKey: ["machines"],
+    queryFn: api.getMachines,
     enabled: !!user,
   });
 
-  const unlockMutation = useMutation({
-    mutationFn: api.unlockFactoryGrid,
-    onSuccess: (grid) => {
-      queryClient.invalidateQueries({ queryKey: ["factory-grids"] });
-      setSelectedGridId(grid.id);
-    },
-    onError: (err) => setUnlockError(err instanceof ApiError ? err.message : "Couldn't unlock a new grid"),
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["machines"] });
+  const reportError = (err: unknown, fallback: string) => setError(err instanceof ApiError ? err.message : fallback);
+
+  const createMutation = useMutation({
+    mutationFn: (key: string) => api.createMachine(key),
+    onSuccess: invalidate,
+    onError: (err) => reportError(err, "Couldn't add machine"),
   });
 
-  const selectedGrid = grids?.find((g) => g.id === selectedGridId) ?? grids?.[0] ?? null;
+  const removeMutation = useMutation({
+    mutationFn: (id: number) => api.removeMachine(id),
+    onSuccess: invalidate,
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (id: number) => api.toggleMachine(id),
+    onSuccess: invalidate,
+  });
+
+  const craftMutation = useMutation({
+    mutationFn: (id: number) => api.craftMachine(id),
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    },
+    onError: (err) => reportError(err, "Couldn't craft"),
+  });
 
   if (authLoading || !user) {
     return <div className="flex h-screen items-center justify-center text-sm text-slate-500">Loading…</div>;
@@ -61,61 +74,119 @@ export default function FactoryPage() {
           </h1>
           <Nav />
         </div>
-
-        {grids && grids.length > 0 && (
-          <div className="flex items-center gap-2">
-            {grids.map((g) => (
-              <button
-                key={g.id}
-                onClick={() => setSelectedGridId(g.id)}
-                className={`rounded-md px-2 py-1 text-xs font-medium ${
-                  (selectedGrid?.id ?? grids[0].id) === g.id
-                    ? "bg-forge-border/60 text-slate-100"
-                    : "text-slate-400 hover:bg-forge-border/40 hover:text-slate-100"
-                }`}
-              >
-                Grid {g.slot_index}
-              </button>
-            ))}
-            <button
-              onClick={() => unlockMutation.mutate()}
-              disabled={unlockMutation.isPending}
-              className="rounded-md border border-forge-border px-2 py-1 text-xs text-slate-400 hover:border-forge-accent/60 hover:text-slate-100 disabled:opacity-50"
-            >
-              + Unlock grid
-            </button>
-          </div>
-        )}
       </header>
 
-      {unlockError && (
+      {error && (
         <div className="border-b border-red-500/30 bg-red-500/10 px-4 py-1.5 text-xs text-red-400">
-          {unlockError}
-          <button onClick={() => setUnlockError(null)} className="ml-2 text-red-300 hover:text-red-100">
+          {error}
+          <button onClick={() => setError(null)} className="ml-2 text-red-300 hover:text-red-100">
             ✕
           </button>
         </div>
       )}
 
-      <main className="flex flex-1 overflow-hidden">
-        {definitions && (
-          <MachinePalette definitions={definitions} armedKey={armedKey} onArm={setArmedKey} />
-        )}
+      <main className="flex-1 overflow-auto p-4 sm:p-6">
+        <section>
+          <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">Add a machine</h2>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {definitions?.map((def) => (
+              <button
+                key={def.key}
+                onClick={() => createMutation.mutate(def.key)}
+                disabled={createMutation.isPending}
+                className="flex items-center gap-2 rounded-md border border-forge-border bg-forge-panel px-3 py-2 text-sm hover:border-forge-accent/60 disabled:opacity-50"
+              >
+                <span className="text-lg leading-none">{def.icon}</span>
+                <span className="text-slate-100">{def.name}</span>
+                <span className="text-xs text-slate-500">
+                  {def.inputs.map((i) => `${i.quantity}${i.resource.icon}`).join("+")} → {def.output_amount}
+                  {def.output_resource.icon}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
 
-        <div className="flex-1">
-          {gridsLoading && (
-            <div className="flex h-full items-center justify-center text-sm text-slate-500">Loading factory…</div>
+        <section className="mt-6">
+          <h2 className="text-xs font-medium uppercase tracking-wide text-slate-500">Your machines</h2>
+
+          {machinesLoading && <p className="mt-2 text-sm text-slate-500">Loading…</p>}
+          {machinesError && <p className="mt-2 text-sm text-red-400">Failed to load machines.</p>}
+          {machines && machines.length === 0 && (
+            <p className="mt-2 text-sm text-slate-500">No machines yet — add one above.</p>
           )}
-          {gridsError && (
-            <div className="flex h-full items-center justify-center text-sm text-red-400">
-              Failed to load the factory. Try refreshing.
-            </div>
-          )}
-          {selectedGrid && (
-            <FactoryCanvas grid={selectedGrid} armedKey={armedKey} onArmedConsumed={() => setArmedKey(null)} />
-          )}
-        </div>
+
+          <div className="mt-2 space-y-2">
+            {machines?.map((machine) => (
+              <MachineRow
+                key={machine.id}
+                machine={machine}
+                onToggle={() => toggleMutation.mutate(machine.id)}
+                onCraft={() => craftMutation.mutate(machine.id)}
+                onRemove={() => removeMutation.mutate(machine.id)}
+                crafting={craftMutation.isPending && craftMutation.variables === machine.id}
+              />
+            ))}
+          </div>
+        </section>
       </main>
+    </div>
+  );
+}
+
+function MachineRow({
+  machine,
+  onToggle,
+  onCraft,
+  onRemove,
+  crafting,
+}: {
+  machine: MachineOut;
+  onToggle: () => void;
+  onCraft: () => void;
+  onRemove: () => void;
+  crafting: boolean;
+}) {
+  const { definition } = machine;
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-forge-border bg-forge-panel p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-3">
+        <span className="text-2xl leading-none">{definition.icon}</span>
+        <div>
+          <div className="text-sm font-medium text-slate-100">{definition.name}</div>
+          <div className="text-xs text-slate-500">
+            {definition.inputs.map((i) => `${i.quantity} ${i.resource.icon}`).join(" + ")} → {definition.output_amount}{" "}
+            {definition.output_resource.icon}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={onToggle}
+          className={`rounded-md border px-2 py-1 text-xs font-medium ${
+            machine.active
+              ? "border-forge-accent/60 bg-forge-accent/10 text-forge-accent"
+              : "border-forge-border text-slate-400"
+          }`}
+        >
+          {machine.active ? "Active" : "Paused"}
+        </button>
+        <button
+          onClick={onCraft}
+          disabled={crafting}
+          className="rounded-md border border-forge-border px-2 py-1 text-xs text-slate-300 hover:border-forge-accent/60 hover:text-slate-100 disabled:opacity-50"
+        >
+          Craft now
+        </button>
+        <button
+          onClick={onRemove}
+          className="rounded-md border border-forge-border px-2 py-1 text-xs text-slate-500 hover:border-red-500/50 hover:text-red-400"
+        >
+          Remove
+        </button>
+      </div>
     </div>
   );
 }

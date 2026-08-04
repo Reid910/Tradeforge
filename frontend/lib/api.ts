@@ -100,29 +100,9 @@ export interface MachineDefinitionOut {
 }
 
 export interface MachineOut {
-  // Index signature required so this type satisfies React Flow's
-  // `Node<T extends Record<string, unknown>>` constraint.
-  [key: string]: unknown;
   id: number;
-  grid_id: number;
   definition: MachineDefinitionOut;
-  x: number;
-  y: number;
-}
-
-export interface MachineConnectionOut {
-  id: number;
-  source_machine_id: number;
-  target_machine_id: number;
-}
-
-export interface FactoryGridOut {
-  id: number;
-  slot_index: number;
-  width: number;
-  height: number;
-  machines: MachineOut[];
-  connections: MachineConnectionOut[];
+  active: boolean;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -161,19 +141,15 @@ export const api = {
   upgradeMine: (mineId: number) => request<UpgradeResponse>(`/api/mines/${mineId}/upgrade`, { method: "POST" }),
   getInventory: () => request<InventoryResponse>("/api/inventory"),
   getMachineDefinitions: () => request<MachineDefinitionOut[]>("/api/factory/definitions"),
-  getFactoryGrids: () => request<FactoryGridOut[]>("/api/factory/grids"),
-  unlockFactoryGrid: () => request<FactoryGridOut>("/api/factory/grids/unlock", { method: "POST" }),
-  placeMachine: (gridId: number, machineDefinitionKey: string, x: number, y: number) =>
-    request<MachineOut>(`/api/factory/grids/${gridId}/machines`, {
+  getMachines: () => request<MachineOut[]>("/api/factory/machines"),
+  createMachine: (machineDefinitionKey: string) =>
+    request<MachineOut>("/api/factory/machines", {
       method: "POST",
-      body: JSON.stringify({ machine_definition_key: machineDefinitionKey, x, y }),
+      body: JSON.stringify({ machine_definition_key: machineDefinitionKey }),
     }),
   removeMachine: (machineId: number) => request<void>(`/api/factory/machines/${machineId}`, { method: "DELETE" }),
-  connectMachines: (sourceMachineId: number, targetMachineId: number) =>
-    request<MachineConnectionOut>("/api/factory/connections", {
-      method: "POST",
-      body: JSON.stringify({ source_machine_id: sourceMachineId, target_machine_id: targetMachineId }),
-    }),
-  disconnectMachines: (connectionId: number) =>
-    request<void>(`/api/factory/connections/${connectionId}`, { method: "DELETE" }),
+  toggleMachine: (machineId: number) =>
+    request<MachineOut>(`/api/factory/machines/${machineId}/toggle`, { method: "POST" }),
+  craftMachine: (machineId: number) =>
+    request<MachineOut>(`/api/factory/machines/${machineId}/craft`, { method: "POST" }),
 };
