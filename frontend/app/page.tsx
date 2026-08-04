@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 
 import BackendStatus from "@/components/BackendStatus";
+import Nav from "@/components/Nav";
 import NodeMap from "@/components/NodeMap";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
@@ -38,12 +38,7 @@ export default function Home() {
           <h1 className="text-sm font-semibold tracking-wide text-slate-100">
             TRADEFORGE <span className="text-slate-500">/ mining map</span>
           </h1>
-          <Link
-            href="/inventory"
-            className="rounded-md px-2 py-1 text-xs font-medium text-slate-300 hover:bg-forge-border/50 hover:text-slate-100"
-          >
-            Inventory
-          </Link>
+          <Nav />
         </div>
         <div className="flex items-center gap-4">
           <BackendStatus />
