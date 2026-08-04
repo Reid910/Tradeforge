@@ -20,8 +20,8 @@ No Redis in v1. Only add it if cross-process WS broadcast, caching, distributed 
 - [x] Unlock a mining node
 - [x] Collect resources from a mine — fully automatic, no click required (see Phase 7)
 - [x] Upgrade mine output (backend endpoint exists and works; no dedicated upgrade button in the UI yet)
-- [ ] Process raw materials → intermediates
-- [ ] Manufacture a finished product
+- [x] Process raw materials → intermediates — place a Furnace, connect it (or don't, for a 1-machine chain), feed it coal + copper ore, watch Copper Ingot show up in Inventory automatically
+- [x] Manufacture a finished product — only intermediates exist so far (no multi-stage chain into a "finished" tier yet), but the mechanism is proven end to end
 - [ ] List materials/products on the market
 - [ ] Get live market updates over WebSocket
 - [ ] Reinvest profit into more nodes/upgrades
@@ -137,7 +137,9 @@ Design pivot from the original plan: not a recipe-list-and-job-queue page. Inste
 - [x] Production: same lazy, tick-based settlement pattern as mines, wired into the same `get_current_user_settled` dependency. A chain's head machine pulls inputs from inventory; intermediates flow machine-to-machine without touching inventory; the tail machine's output credits inventory. Run count per settle = `min(elapsed_ticks, affordable_runs_from_current_inventory)` — a starved chain produces nothing and is **not** banked for later, same principle as the mine offline cap, so restocking after a long gap doesn't trigger unbounded catch-up
 - [x] `GET /api/factory/definitions`, `GET /api/factory/grids`, `POST /api/factory/grids/unlock`, `POST /api/factory/grids/{id}/machines`, `DELETE /api/factory/machines/{id}`, `POST /api/factory/connections`, `DELETE /api/factory/connections/{id}`
 - [x] Verified via curl with tight timing: mines and factory settle on identical elapsed-tick counts, confirming the shared clock actually holds in practice, not just in theory
-- [ ] Frontend grid-placement UI (palette, drag-to-place, drag-to-connect) — next PR, same split as mine backend/frontend
+- [x] Frontend grid-placement UI: React Flow canvas at `/factory`, palette to pick a machine type then click an empty cell to place it, drag between machine handles to connect (native React Flow `onConnect`), select + Delete key to remove a machine or connection. Every cell (empty or occupied) is a node so placement and machines share one coordinate system
+- [x] Deliberately minimal on this page: no live-ticking numbers per machine, no "producing/idle" status — this is the *planning* surface (where do things go, how are they wired), production totals surface entirely on Inventory, matching the same design call made for the map page after mine production shipped
+- [x] Shared `<Nav>` component across map/factory/inventory now that there are three pages worth cross-linking, replacing the ad hoc single link each page had before
 - [ ] Automated tests — verified manually via curl (production math, cycle rejection, duplicate-connection rejection, cross-user ownership, out-of-bounds/occupied-cell placement) but no Pytest suite yet; Phase 15
 
 ## Phase 10 — Market order book
