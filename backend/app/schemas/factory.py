@@ -20,8 +20,19 @@ class MachineDefinitionOut(BaseModel):
 class MachineOut(BaseModel):
     id: int
     definition: MachineDefinitionOut
+    position: int
+
+
+class MachineChainOut(BaseModel):
+    id: int
+    name: str
     active: bool
+    machines: list[MachineOut]
 
 
-class CreateMachineRequest(BaseModel):
+class CreateChainRequest(BaseModel):
+    name: str
+
+
+class AddMachineRequest(BaseModel):
     machine_definition_key: str

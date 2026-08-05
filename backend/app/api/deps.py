@@ -5,7 +5,7 @@ from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import User
-from app.services.factory_service import settle_all_factories
+from app.services.factory_service import settle_all_chains
 from app.services.mine_service import settle_all_mines
 
 
@@ -37,5 +37,5 @@ def get_current_user_settled(
     instead of via a dedicated collect action.
     """
     settle_all_mines(db, current_user.id)
-    settle_all_factories(db, current_user.id)
+    settle_all_chains(db, current_user.id)
     return current_user
