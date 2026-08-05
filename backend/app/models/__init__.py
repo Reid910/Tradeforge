@@ -1,5 +1,6 @@
 from app.models.inventory_item import InventoryItem
 from app.models.machine import Machine
+from app.models.machine_chain import MachineChain
 from app.models.machine_definition import MachineDefinition, MachineDefinitionInput
 from app.models.magic_link_token import MagicLinkToken
 from app.models.map_node import MapNode
@@ -16,5 +17,6 @@ __all__ = [
     "InventoryItem",
     "MachineDefinition",
     "MachineDefinitionInput",
+    "MachineChain",
     "Machine",
 ]

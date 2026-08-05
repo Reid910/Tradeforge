@@ -102,7 +102,14 @@ export interface MachineDefinitionOut {
 export interface MachineOut {
   id: number;
   definition: MachineDefinitionOut;
+  position: number;
+}
+
+export interface MachineChainOut {
+  id: number;
+  name: string;
   active: boolean;
+  machines: MachineOut[];
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -141,15 +148,18 @@ export const api = {
   upgradeMine: (mineId: number) => request<UpgradeResponse>(`/api/mines/${mineId}/upgrade`, { method: "POST" }),
   getInventory: () => request<InventoryResponse>("/api/inventory"),
   getMachineDefinitions: () => request<MachineDefinitionOut[]>("/api/factory/definitions"),
-  getMachines: () => request<MachineOut[]>("/api/factory/machines"),
-  createMachine: (machineDefinitionKey: string) =>
-    request<MachineOut>("/api/factory/machines", {
+  getChains: () => request<MachineChainOut[]>("/api/factory/chains"),
+  createChain: (name: string) =>
+    request<MachineChainOut>("/api/factory/chains", { method: "POST", body: JSON.stringify({ name }) }),
+  removeChain: (chainId: number) => request<void>(`/api/factory/chains/${chainId}`, { method: "DELETE" }),
+  toggleChain: (chainId: number) =>
+    request<MachineChainOut>(`/api/factory/chains/${chainId}/toggle`, { method: "POST" }),
+  runChain: (chainId: number) => request<MachineChainOut>(`/api/factory/chains/${chainId}/run`, { method: "POST" }),
+  addMachine: (chainId: number, machineDefinitionKey: string) =>
+    request<MachineChainOut>(`/api/factory/chains/${chainId}/machines`, {
       method: "POST",
       body: JSON.stringify({ machine_definition_key: machineDefinitionKey }),
     }),
-  removeMachine: (machineId: number) => request<void>(`/api/factory/machines/${machineId}`, { method: "DELETE" }),
-  toggleMachine: (machineId: number) =>
-    request<MachineOut>(`/api/factory/machines/${machineId}/toggle`, { method: "POST" }),
-  craftMachine: (machineId: number) =>
-    request<MachineOut>(`/api/factory/machines/${machineId}/craft`, { method: "POST" }),
+  removeMachine: (chainId: number, machineId: number) =>
+    request<MachineChainOut>(`/api/factory/chains/${chainId}/machines/${machineId}`, { method: "DELETE" }),
 };

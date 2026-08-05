@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.ticks import tick_boundary
 from app.models.machine import Machine
+from app.models.machine_chain import MachineChain
 from app.models.machine_definition import MachineDefinition
-from app.schemas.factory import MachineDefinitionOut, MachineInputOut, MachineOut
+from app.schemas.factory import MachineChainOut, MachineDefinitionOut, MachineInputOut, MachineOut
 from app.services.inventory_service import (
     available_quantity,
     credit_inventory,
@@ -29,20 +30,39 @@ def machine_definition_to_out(definition: MachineDefinition) -> MachineDefinitio
     )
 
 
-def machine_to_out(machine: Machine) -> MachineOut:
-    return MachineOut(id=machine.id, definition=machine_definition_to_out(machine.definition), active=machine.active)
+def _ordered_machines(db: Session, chain_id: int) -> list[Machine]:
+    return (
+        db.execute(select(Machine).where(Machine.chain_id == chain_id).order_by(Machine.position))
+        .scalars()
+        .all()
+    )
+
+
+def chain_to_out(db: Session, chain: MachineChain) -> MachineChainOut:
+    machines = _ordered_machines(db, chain.id)
+    return MachineChainOut(
+        id=chain.id,
+        name=chain.name,
+        active=chain.active,
+        machines=[
+            MachineOut(id=m.id, definition=machine_definition_to_out(m.definition), position=m.position)
+            for m in machines
+        ],
+    )
 
 
 # --- lookups ------------------------------------------------------------
 
 
-def _get_owned_machine_locked(db: Session, user_id: int, machine_id: int) -> Machine:
-    machine = db.execute(
-        select(Machine).where(Machine.id == machine_id, Machine.user_id == user_id).with_for_update(of=Machine)
+def _get_owned_chain_locked(db: Session, user_id: int, chain_id: int) -> MachineChain:
+    chain = db.execute(
+        select(MachineChain)
+        .where(MachineChain.id == chain_id, MachineChain.user_id == user_id)
+        .with_for_update(of=MachineChain)
     ).scalar_one_or_none()
-    if machine is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Machine not found")
-    return machine
+    if chain is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chain not found")
+    return chain
 
 
 def list_machine_definitions(db: Session) -> list[MachineDefinitionOut]:
@@ -50,84 +70,176 @@ def list_machine_definitions(db: Session) -> list[MachineDefinitionOut]:
     return [machine_definition_to_out(d) for d in definitions]
 
 
-# --- machines ---------------------------------------------------------------
+# --- chains ---------------------------------------------------------------
 
 
-def list_machines(db: Session, user_id: int) -> list[MachineOut]:
-    machines = db.execute(select(Machine).where(Machine.user_id == user_id)).scalars().all()
-    return [machine_to_out(m) for m in machines]
+def list_chains(db: Session, user_id: int) -> list[MachineChainOut]:
+    chains = (
+        db.execute(select(MachineChain).where(MachineChain.user_id == user_id).order_by(MachineChain.created_at))
+        .scalars()
+        .all()
+    )
+    return [chain_to_out(db, c) for c in chains]
 
 
-def create_machine(db: Session, user_id: int, definition_key: str) -> MachineOut:
+def create_chain(db: Session, user_id: int, name: str) -> MachineChainOut:
+    chain = MachineChain(
+        user_id=user_id,
+        name=name,
+        active=True,
+        # Snap onto the shared tick grid immediately, same as mines, so
+        # this chain is in sync with everything else from the start.
+        last_settled_at=tick_boundary(datetime.now(timezone.utc)),
+    )
+    db.add(chain)
+    db.commit()
+    db.refresh(chain)
+    return chain_to_out(db, chain)
+
+
+def remove_chain(db: Session, user_id: int, chain_id: int) -> None:
+    chain = _get_owned_chain_locked(db, user_id, chain_id)
+    db.delete(chain)
+    db.commit()
+
+
+def toggle_chain_active(db: Session, user_id: int, chain_id: int) -> MachineChainOut:
+    chain = _get_owned_chain_locked(db, user_id, chain_id)
+    chain.active = not chain.active
+    if chain.active:
+        # Resuming from paused - the clock was frozen while paused, so
+        # resume from now rather than counting the whole paused span as
+        # available production.
+        chain.last_settled_at = tick_boundary(datetime.now(timezone.utc))
+    db.commit()
+    db.refresh(chain)
+    return chain_to_out(db, chain)
+
+
+# --- machines within a chain ------------------------------------------------
+
+
+def add_machine(db: Session, user_id: int, chain_id: int, definition_key: str) -> MachineChainOut:
+    chain = _get_owned_chain_locked(db, user_id, chain_id)
+
     definition = db.execute(
         select(MachineDefinition).where(MachineDefinition.key == definition_key)
     ).scalar_one_or_none()
     if definition is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Unknown machine type")
 
-    machine = Machine(
-        user_id=user_id,
-        machine_definition_id=definition.id,
-        active=True,
-        # Snap onto the shared tick grid immediately, same as mines, so
-        # this machine is in sync with everything else from the start.
-        last_settled_at=tick_boundary(datetime.now(timezone.utc)),
-    )
-    db.add(machine)
+    next_position = len(_ordered_machines(db, chain.id))
+    db.add(Machine(chain_id=chain.id, machine_definition_id=definition.id, position=next_position))
     db.commit()
-    db.refresh(machine)
-    return machine_to_out(machine)
+    db.refresh(chain)
+    return chain_to_out(db, chain)
 
 
-def remove_machine(db: Session, user_id: int, machine_id: int) -> None:
-    machine = _get_owned_machine_locked(db, user_id, machine_id)
+def remove_machine(db: Session, user_id: int, chain_id: int, machine_id: int) -> MachineChainOut:
+    chain = _get_owned_chain_locked(db, user_id, chain_id)
+
+    machine = db.execute(
+        select(Machine).where(Machine.id == machine_id, Machine.chain_id == chain.id)
+    ).scalar_one_or_none()
+    if machine is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Machine not found")
+
     db.delete(machine)
-    db.commit()
+    db.flush()
 
-
-def toggle_active(db: Session, user_id: int, machine_id: int) -> MachineOut:
-    machine = _get_owned_machine_locked(db, user_id, machine_id)
-    machine.active = not machine.active
-    if machine.active:
-        # Resuming from paused - the clock was frozen while paused, so
-        # resume from now rather than counting the whole paused span as
-        # available production.
-        machine.last_settled_at = tick_boundary(datetime.now(timezone.utc))
-    db.commit()
-    db.refresh(machine)
-    return machine_to_out(machine)
-
-
-def craft_now(db: Session, user_id: int, machine_id: int) -> MachineOut:
-    """Manually run one production cycle immediately, regardless of the
-    active/paused state - an on-demand alternative to waiting for the next
-    automatic tick.
-    """
-    machine = _get_owned_machine_locked(db, user_id, machine_id)
-
-    for requirement in machine.definition.inputs:
-        if available_quantity(db, user_id, requirement.resource_id) < requirement.quantity:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Not enough {requirement.resource.name} to craft",
-            )
-
-    for requirement in machine.definition.inputs:
-        deduct_inventory(db, user_id, requirement.resource_id, requirement.quantity)
-
-    credit_inventory(db, user_id, machine.definition.output_resource_id, machine.definition.output_amount)
+    # Close the gap so positions stay contiguous (0..n-1) - the settlement
+    # walk relies on ordering, not on position values being meaningful.
+    for index, remaining in enumerate(_ordered_machines(db, chain.id)):
+        remaining.position = index
 
     db.commit()
-    db.refresh(machine)
-    return machine_to_out(machine)
+    db.refresh(chain)
+    return chain_to_out(db, chain)
 
 
 # --- production settlement -------------------------------------------------
 
 
-def _settle_machine(db: Session, machine: Machine, now: datetime) -> None:
+def _chain_inventory_need_per_run(machines: list[Machine]) -> dict[int, int]:
+    """Walk the chain once to figure out, for a single pass, how much of
+    each resource must come from inventory as opposed to being carried
+    from the previous machine's output. Machines run in lockstep with no
+    buffering between them, so this per-run breakdown is identical for
+    every run - N runs just multiply it out.
+    """
+    need: dict[int, int] = {}
+    carried_resource_id: int | None = None
+    carried_amount = 0
+
+    for machine in machines:
+        definition = machine.definition
+        for requirement in definition.inputs:
+            from_carry = requirement.quantity if requirement.resource_id == carried_resource_id else 0
+            from_carry = min(from_carry, carried_amount)
+            from_inventory = requirement.quantity - from_carry
+            if from_inventory > 0:
+                need[requirement.resource_id] = need.get(requirement.resource_id, 0) + from_inventory
+        carried_resource_id = definition.output_resource_id
+        carried_amount = definition.output_amount
+
+    return need
+
+
+def _run_chain(db: Session, user_id: int, machines: list[Machine], max_runs: int) -> int:
+    """Execute up to max_runs passes through the chain. All-or-nothing per
+    run: if any machine along the chain can't get enough input, the whole
+    pass produces nothing, since only the final machine's output ever
+    touches inventory - there's nothing partial to credit.
+    """
+    if not machines or max_runs <= 0:
+        return 0
+
+    need_per_run = _chain_inventory_need_per_run(machines)
+
+    runs = max_runs
+    for resource_id, need in need_per_run.items():
+        if need <= 0:
+            continue
+        affordable = available_quantity(db, user_id, resource_id) // need
+        runs = min(runs, affordable)
+
+    if runs <= 0:
+        return 0
+
+    for resource_id, need in need_per_run.items():
+        if need > 0:
+            deduct_inventory(db, user_id, resource_id, need * runs)
+
+    tail_definition = machines[-1].definition
+    credit_inventory(db, user_id, tail_definition.output_resource_id, tail_definition.output_amount * runs)
+    return runs
+
+
+def run_chain_now(db: Session, user_id: int, chain_id: int) -> MachineChainOut:
+    """Manually run one pass through the chain immediately. Only allowed
+    while paused, so a manual run can never race with the automatic
+    per-tick settlement of the same chain.
+    """
+    chain = _get_owned_chain_locked(db, user_id, chain_id)
+    if chain.active:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pause the chain before running it manually")
+
+    machines = _ordered_machines(db, chain.id)
+    if not machines:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Add a machine to the chain first")
+
+    runs = _run_chain(db, user_id, machines, max_runs=1)
+    if runs == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not enough resources to run this chain")
+
+    db.commit()
+    db.refresh(chain)
+    return chain_to_out(db, chain)
+
+
+def _settle_chain(db: Session, chain: MachineChain, now: datetime) -> None:
     max_elapsed = timedelta(hours=settings.max_offline_hours)
-    effective_last = max(machine.last_settled_at, now - max_elapsed)
+    effective_last = max(chain.last_settled_at, now - max_elapsed)
 
     now_boundary = tick_boundary(now)
     last_boundary = tick_boundary(effective_last)
@@ -139,40 +251,35 @@ def _settle_machine(db: Session, machine: Machine, now: datetime) -> None:
     # starved of input this settle - a starved period is forfeit, not
     # banked, same principle as the mine offline cap. Otherwise restocking
     # after a long gap would trigger an unbounded catch-up burst.
-    machine.last_settled_at = now_boundary
+    chain.last_settled_at = now_boundary
 
-    runs = elapsed_ticks
-    for requirement in machine.definition.inputs:
-        affordable = available_quantity(db, machine.user_id, requirement.resource_id) // requirement.quantity
-        runs = min(runs, affordable)
-
-    if runs <= 0:
+    machines = _ordered_machines(db, chain.id)
+    if not machines:
         return
 
-    for requirement in machine.definition.inputs:
-        deduct_inventory(db, machine.user_id, requirement.resource_id, requirement.quantity * runs)
-
-    credit_inventory(db, machine.user_id, machine.definition.output_resource_id, machine.definition.output_amount * runs)
+    _run_chain(db, chain.user_id, machines, max_runs=elapsed_ticks)
 
 
-def settle_all_factories(db: Session, user_id: int) -> None:
+def settle_all_chains(db: Session, user_id: int) -> None:
     """Same lazy, timestamp-based, tick-synchronized pattern as mines - no
     background worker, just settled as a side effect of any request that
-    touches factory/inventory data (see api/deps.py). Paused machines are
+    touches factory/inventory data (see api/deps.py). Paused chains are
     skipped entirely (their clock stays frozen).
     """
-    machines = (
+    chains = (
         db.execute(
-            select(Machine).where(Machine.user_id == user_id, Machine.active.is_(True)).with_for_update(of=Machine)
+            select(MachineChain)
+            .where(MachineChain.user_id == user_id, MachineChain.active.is_(True))
+            .with_for_update(of=MachineChain)
         )
         .scalars()
         .all()
     )
-    if not machines:
+    if not chains:
         return
 
     now = datetime.now(timezone.utc)
-    for machine in machines:
-        _settle_machine(db, machine, now)
+    for chain in chains:
+        _settle_chain(db, chain, now)
 
     db.commit()
