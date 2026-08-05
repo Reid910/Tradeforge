@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import Nav from "@/components/Nav";
 import { api, ApiError, type MachineChainOut, type MachineDefinitionOut } from "@/lib/api";
 import { useAuth } from "@/lib/useAuth";
+
+// Matches the backend's shared tick length (settings.tick_seconds) so
+// chains and the output counters below visibly update while sitting on
+// this page - production is fully automatic, this is just how the UI
+// notices it happened.
+const TICK_POLL_MS = 6000;
 
 export default function FactoryPage() {
   const router = useRouter();
@@ -32,7 +38,16 @@ export default function FactoryPage() {
     queryKey: ["chains"],
     queryFn: api.getChains,
     enabled: !!user,
+    refetchInterval: TICK_POLL_MS,
   });
+
+  const { data: inventory } = useQuery({
+    queryKey: ["inventory"],
+    queryFn: api.getInventory,
+    enabled: !!user,
+    refetchInterval: TICK_POLL_MS,
+  });
+  const inventoryByKey = new Map((inventory?.items ?? []).map((item) => [item.resource.key, item.quantity]));
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ["chains"] });
   const reportError = (err: unknown, fallback: string) => setError(err instanceof ApiError ? err.message : fallback);
@@ -108,18 +123,19 @@ export default function FactoryPage() {
             className="mt-2 flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              if (newChainName.trim()) createChainMutation.mutate(newChainName.trim());
+              const defaultName = `Chain ${(chains?.length ?? 0) + 1}`;
+              createChainMutation.mutate(newChainName.trim() || defaultName);
             }}
           >
             <input
               value={newChainName}
               onChange={(e) => setNewChainName(e.target.value)}
-              placeholder="e.g. Copper Line"
+              placeholder={`Chain ${(chains?.length ?? 0) + 1}`}
               className="rounded-md border border-forge-border bg-forge-panel px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-forge-accent/60 focus:outline-none"
             />
             <button
               type="submit"
-              disabled={createChainMutation.isPending || !newChainName.trim()}
+              disabled={createChainMutation.isPending}
               className="rounded-md border border-forge-border px-3 py-2 text-sm text-slate-300 hover:border-forge-accent/60 hover:text-slate-100 disabled:opacity-50"
             >
               Create chain
@@ -142,6 +158,7 @@ export default function FactoryPage() {
                 key={chain.id}
                 chain={chain}
                 definitions={definitions ?? []}
+                inventoryByKey={inventoryByKey}
                 onToggle={() => toggleChainMutation.mutate(chain.id)}
                 onRun={() => runChainMutation.mutate(chain.id)}
                 onRemoveChain={() => removeChainMutation.mutate(chain.id)}
@@ -157,9 +174,30 @@ export default function FactoryPage() {
   );
 }
 
+// Flashes true for a moment whenever the value goes up, so a live counter
+// can visibly highlight the instant new output lands - a direct, honest
+// signal that a chain actually produced something, not a fake animation.
+function useFlashOnIncrease(value: number | null): boolean {
+  const previous = useRef(value);
+  const [flashing, setFlashing] = useState(false);
+
+  useEffect(() => {
+    if (value !== null && previous.current !== null && value > previous.current) {
+      setFlashing(true);
+      const timeout = setTimeout(() => setFlashing(false), 800);
+      previous.current = value;
+      return () => clearTimeout(timeout);
+    }
+    previous.current = value;
+  }, [value]);
+
+  return flashing;
+}
+
 function ChainCard({
   chain,
   definitions,
+  inventoryByKey,
   onToggle,
   onRun,
   onRemoveChain,
@@ -169,6 +207,7 @@ function ChainCard({
 }: {
   chain: MachineChainOut;
   definitions: MachineDefinitionOut[];
+  inventoryByKey: Map<string, number>;
   onToggle: () => void;
   onRun: () => void;
   onRemoveChain: () => void;
@@ -176,20 +215,37 @@ function ChainCard({
   onRemoveMachine: (machineId: number) => void;
   running: boolean;
 }) {
+  const tailMachine = chain.machines[chain.machines.length - 1];
+  const outputQuantity = tailMachine ? inventoryByKey.get(tailMachine.definition.output_resource.key) ?? 0 : null;
+  const justProduced = useFlashOnIncrease(outputQuantity);
+
   return (
     <div className="rounded-lg border border-forge-border bg-forge-panel p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium text-slate-100">{chain.name}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-slate-100">{chain.name}</span>
+          {tailMachine && (
+            <span
+              className={`flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs transition-colors duration-300 ${
+                justProduced ? "border-forge-accent/60 text-forge-accent" : "border-forge-border text-slate-500"
+              }`}
+              title={`${tailMachine.definition.output_resource.name} in inventory`}
+            >
+              {tailMachine.definition.output_resource.icon} {outputQuantity}
+            </span>
+          )}
+        </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={onToggle}
-            className={`rounded-md border px-2 py-1 text-xs font-medium ${
+            className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium ${
               chain.active
                 ? "border-forge-accent/60 bg-forge-accent/10 text-forge-accent"
                 : "border-forge-border text-slate-400"
             }`}
           >
+            {chain.active && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-forge-accent" />}
             {chain.active ? "Active" : "Paused"}
           </button>
           <button
@@ -214,7 +270,7 @@ function ChainCard({
 
         {chain.machines.map((machine, index) => (
           <div key={machine.id} className="flex items-center gap-2">
-            {index > 0 && <span className="text-slate-600">→</span>}
+            {index > 0 && <ChainArrow active={chain.active} />}
             <div className="group relative flex items-center gap-2 rounded-md border border-forge-border bg-forge-bg px-2 py-1.5">
               <span className="text-lg leading-none">{machine.definition.icon}</span>
               <div className="text-xs">
@@ -236,11 +292,15 @@ function ChainCard({
           </div>
         ))}
 
-        {chain.machines.length > 0 && <span className="text-slate-600">→</span>}
+        {chain.machines.length > 0 && <ChainArrow active={chain.active} />}
         <AddMachineMenu definitions={definitions} onAdd={onAddMachine} />
       </div>
     </div>
   );
+}
+
+function ChainArrow({ active }: { active: boolean }) {
+  return <span className={active ? "animate-pulse text-forge-accent" : "text-slate-600"}>→</span>;
 }
 
 function AddMachineMenu({
