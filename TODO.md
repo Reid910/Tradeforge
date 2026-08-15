@@ -70,8 +70,8 @@ Passwordless by design decision — no password field on `User` at all, not just
 - [x] `Mine` — id, user_id, map_node_id, resource_id, level, storage_capacity, stored_quantity, last_collected_at, created_at (`cycle_duration` and `active` dropped: cycle length is derived from `level` via a pure function instead of stored, and there's no "inactive mine" state yet)
 - [x] `MachineDefinition` / `MachineDefinitionInput` — replaces the originally sketched `Recipe`/`RecipeInput`: key, name, icon, output resource+qty, inputs (resource+qty each). No `duration` field — production duration is the shared global tick, not per-recipe
 - [x] `MachineChain` — id, user_id, name, active, last_settled_at, created_at. `Machine` — id, chain_id, machine_definition_id, position, created_at (replaces the originally sketched `ProductionJob` and the earlier standalone `Machine`: ownership/active-state/settlement now live on the chain, a machine is just a definition + its left-to-right position within one)
-- [ ] `MarketOrder` — id, user_id, resource_id, side (buy/sell), price, original/remaining_quantity, status, timestamps
-- [ ] `Trade` — id, resource_id, buyer_id, seller_id, buy_order_id, sell_order_id, quantity, price, total_value, created_at
+- [x] `MarketOrder` — id, user_id, resource_id, side (buy/sell), price, original/remaining_quantity, status, timestamps
+- [x] `Trade` — id, resource_id, buyer_id, seller_id, buy_order_id, sell_order_id, quantity, price, total_value, created_at (plus `fee`, per Phase 10's configurable transaction fee). `User.reserved_balance` added alongside — the currency-side counterpart to `InventoryItem.reserved_quantity`, needed to reserve a buyer's funds on order creation
 - [ ] `RareDropLog` — id, user_id, mine_id, resource_id, cycle_number, drop_table_version, quantity, generated_at
 - [x] All currency/price columns use `Numeric`, never float
 
@@ -140,14 +140,14 @@ Went through four real designs before landing here, each one shipped, curl-verif
 
 ## Phase 10 — Market order book
 
-- [ ] Limit buy/sell orders: create, cancel, list
-- [ ] Matching: best price, then earliest creation time; partial fills supported
-- [ ] Reserve seller inventory and buyer currency on order creation; release on cancel
-- [ ] Permanent trade-history records
-- [ ] Match sequence inside a DB transaction: lock both orders → confirm remaining qty/reserves → compute fill → transfer inventory + currency → deduct fee → update remaining qty → close filled orders → write trade → commit → **then** publish WS event
-- [ ] Row locking to prevent duplicate/concurrent execution
-- [ ] Configurable transaction fee
-- [ ] `GET /api/market/resources/{id}/orders`, `GET /api/market/resources/{id}/trades`, `POST /api/market/orders`, `DELETE /api/market/orders/{id}`, `GET /api/market/my-orders`
+- [x] Limit buy/sell orders: create, cancel, list
+- [x] Matching: best price, then earliest creation time; partial fills supported
+- [x] Reserve seller inventory (existing `InventoryItem.reserved_quantity`) and buyer currency (new `User.reserved_balance`) on order creation; release on cancel
+- [x] Permanent trade-history records (`trades` table)
+- [x] Match sequence inside a DB transaction: lock both orders → confirm remaining qty/reserves → compute fill → transfer inventory + currency → deduct fee → update remaining qty → close filled orders → write trade → commit → **then** publish WS event — everything up to commit is done; the WS publish step is Phase 11
+- [x] Row locking to prevent duplicate/concurrent execution (`with_for_update` on the user, inventory item, and both orders involved in each fill)
+- [x] Configurable transaction fee (`settings.market_fee_rate`, charged to the seller's proceeds)
+- [x] `GET /api/market/resources/{key}/orders`, `GET /api/market/resources/{key}/trades`, `POST /api/market/orders`, `DELETE /api/market/orders/{id}`, `GET /api/market/my-orders` — routes use the resource's string `key`, not a numeric id, matching how every other resource lookup in this codebase works
 
 ## Phase 11 — WebSocket market updates (`/ws/market`)
 

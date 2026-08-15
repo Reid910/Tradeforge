@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +37,10 @@ class Settings(BaseSettings):
     mine_base_storage: int = 20
     mine_storage_per_level: int = 10
     mine_max_level: int = 10
+
+    # Charged to the seller's proceeds on every trade fill, same rationale
+    # as everywhere else money is involved: Decimal, never float.
+    market_fee_rate: Decimal = Decimal("0.01")
 
     @property
     def cookie_secure(self) -> bool:
