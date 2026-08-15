@@ -151,14 +151,14 @@ Went through four real designs before landing here, each one shipped, curl-verif
 
 ## Phase 11 — WebSocket market updates (`/ws/market`)
 
-- [ ] Client → server: `subscribe`/`unsubscribe` with `resourceId`
-- [ ] Server → client: `order_created`, `order_updated`, `order_cancelled`, `trade_completed`, `best_bid_updated`, `best_ask_updated`, `market_snapshot_required`, `ping`/`pong`
-- [ ] Authenticated connections; per-resource subscription tracking; no full-broadcast
-- [ ] Clean up disconnected clients; heartbeat
-- [ ] Frontend auto-reconnect with exponential backoff + fresh REST snapshot on reconnect
-- [ ] Postgres is the source of truth — commit before broadcast, never the other way around
-- [ ] Event IDs/sequence numbers; duplicate events are safely ignorable
-- [ ] Never dump full game state into a single WS message
+- [x] Client → server: `subscribe`/`unsubscribe` with `resource_key` (string key, not a numeric `resourceId` — matches every other resource lookup in this codebase)
+- [x] Server → client: `order_created`, `order_updated`, `order_cancelled`, `trade_completed`, `best_bid_updated`, `best_ask_updated`, `market_snapshot_required`, `ping`/`pong`
+- [x] Authenticated connections (session cookie, same JWT as REST); per-resource subscription tracking; no full-broadcast (a `dict[resource_key, set[WebSocket]]` in `MarketConnectionManager`)
+- [x] Clean up disconnected clients; heartbeat (30s `receive_json` timeout triggers a `ping`; disconnect drops all of that socket's subscriptions)
+- [ ] Frontend auto-reconnect with exponential backoff + fresh REST snapshot on reconnect — deferred to Phase 12, since there's no market UI/WS client yet for it to live in
+- [x] Postgres is the source of truth — commit before broadcast, never the other way around (`manager.publish(...)` is only ever called as the line immediately after `db.commit()`)
+- [x] Event IDs/sequence numbers; duplicate events are safely ignorable (monotonic `seq` counter per event; server is single-process/in-memory only, per "no Redis in v1")
+- [x] Never dump full game state into a single WS message — on `subscribe`, the server sends `market_snapshot_required` (not the book itself) so the client fetches its own REST snapshot; only deltas stream after that
 
 ## Phase 12 — Market UI
 
