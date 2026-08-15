@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/", label: "Map" },
   { href: "/factory", label: "Factory" },
   { href: "/inventory", label: "Inventory" },
+  { href: "/market", label: "Market" },
 ];
 
 export default function Nav() {

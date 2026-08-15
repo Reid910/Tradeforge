@@ -22,9 +22,9 @@ No Redis in v1. Only add it if cross-process WS broadcast, caching, distributed 
 - [x] Upgrade mine output (backend endpoint exists and works; no dedicated upgrade button in the UI yet)
 - [x] Process raw materials → intermediates — place a Furnace, connect it (or don't, for a 1-machine chain), feed it coal + copper ore, watch Copper Ingot show up in Inventory automatically
 - [x] Manufacture a finished product — only intermediates exist so far (no multi-stage chain into a "finished" tier yet), but the mechanism is proven end to end
-- [ ] List materials/products on the market
-- [ ] Get live market updates over WebSocket
-- [ ] Reinvest profit into more nodes/upgrades
+- [x] List materials/products on the market
+- [x] Get live market updates over WebSocket
+- [ ] Reinvest profit into more nodes/upgrades — mine upgrades are still free (no currency sink wired up); this is the same open design question flagged in Phase 5 (Mining Drills → upgrades)
 
 **Explicitly out of scope for v1:** combat, guilds, direct player-to-player trades, conveyor-belt sim, worker management, deep crafting trees, Redis, multiple backend instances, infinite maps, auctions, equipment, chat, friends lists, leaderboards, multi-currency, mobile app.
 
@@ -162,12 +162,12 @@ Went through four real designs before landing here, each one shipped, curl-verif
 
 ## Phase 12 — Market UI
 
-- [ ] Resource selector, current inventory/balance, best bid/ask
-- [ ] Buy/sell order tables, recent trades, order create/cancel dialogs
-- [ ] Live WS updates + connection status indicator
-- [ ] Price history + volume charts (Recharts)
-- [ ] Open-orders list
-- [ ] UI clearly separates available vs. reserved inventory, and available vs. reserved currency
+- [x] Resource selector, current inventory/balance, best bid/ask
+- [x] Buy/sell order tables, recent trades, order create/cancel — **forms, not dialogs**: shadcn/ui (which is where a real dialog primitive would come from) isn't installed until Phase 13, and every other page in the app hand-rolls Tailwind rather than using modals for anything (e.g. factory's inline "New chain" form). An inline buy/sell form matches that existing convention; revisit as a modal once Phase 13 lands
+- [x] Live WS updates + connection status indicator (`lib/useMarketSocket.ts` — subscribe, handle `market_snapshot_required` by invalidating the REST queries, exponential-backoff auto-reconnect; status dot in the page header, same visual pattern as `BackendStatus`)
+- [ ] Price history + volume charts (Recharts) — deferred: not part of the MVP loop checklist, and there's no price-history endpoint yet either (would need one first)
+- [x] Open-orders list (with cancel)
+- [x] UI clearly separates available vs. reserved inventory, and available vs. reserved currency — required exposing `User.reserved_balance` on `GET /api/auth/me`, which wasn't in `UserOut` yet (added here). Also added `GET /api/market/resources` (list of tradable resources), since nothing existed for the resource selector to query
 
 ## Phase 13 — App shell & nav
 

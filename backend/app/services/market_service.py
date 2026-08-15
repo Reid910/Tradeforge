@@ -10,8 +10,19 @@ from app.models.market_order import MarketOrder
 from app.models.resource import ResourceDefinition
 from app.models.trade import Trade
 from app.models.user import User
+from app.schemas.map import ResourceOut
 from app.schemas.market import MarketOrderOut, OrderBookOut, TradeOut
 from app.websocket.manager import manager
+
+
+def list_tradable_resources(db: Session) -> list[ResourceOut]:
+    resources = (
+        db.execute(select(ResourceDefinition).where(ResourceDefinition.tradable.is_(True)).order_by(ResourceDefinition.name))
+        .scalars()
+        .all()
+    )
+    return [ResourceOut.model_validate(r) for r in resources]
+
 
 # --- lookups / locking helpers ----------------------------------------------
 

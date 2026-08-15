@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user_settled
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.map import ResourceOut
 from app.schemas.market import (
     CreateOrderRequest,
     MarketOrderOut,
@@ -15,10 +16,16 @@ from app.services.market_service import (
     create_order,
     get_order_book,
     list_my_orders,
+    list_tradable_resources,
     list_trades,
 )
 
 router = APIRouter(prefix="/market", tags=["market"])
+
+
+@router.get("/resources", response_model=list[ResourceOut])
+def read_tradable_resources(db: Session = Depends(get_db)) -> list[ResourceOut]:
+    return list_tradable_resources(db)
 
 
 @router.get("/resources/{resource_key}/orders", response_model=OrderBookOut)

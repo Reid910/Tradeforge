@@ -23,6 +23,7 @@ class UserOut(BaseModel):
     email: str | None
     is_guest: bool
     balance: Decimal
+    reserved_balance: Decimal
     created_at: datetime
 
     model_config = {"from_attributes": True}

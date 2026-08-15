@@ -51,6 +51,7 @@ export interface UserOut {
   email: string | null;
   is_guest: boolean;
   balance: string;
+  reserved_balance: string;
   created_at: string;
 }
 
@@ -112,6 +113,38 @@ export interface MachineChainOut {
   machines: MachineOut[];
 }
 
+export interface MarketOrderOut {
+  id: number;
+  resource: ResourceOut;
+  side: "buy" | "sell";
+  price: string;
+  original_quantity: number;
+  remaining_quantity: number;
+  status: "open" | "filled" | "cancelled";
+  created_at: string;
+}
+
+export interface TradeOut {
+  id: number;
+  resource: ResourceOut;
+  quantity: number;
+  price: string;
+  total_value: string;
+  created_at: string;
+}
+
+export interface OrderBookOut {
+  buy_orders: MarketOrderOut[];
+  sell_orders: MarketOrderOut[];
+}
+
+export interface CreateOrderRequest {
+  resource_key: string;
+  side: "buy" | "sell";
+  price: string;
+  quantity: number;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -162,4 +195,11 @@ export const api = {
     }),
   removeMachine: (chainId: number, machineId: number) =>
     request<MachineChainOut>(`/api/factory/chains/${chainId}/machines/${machineId}`, { method: "DELETE" }),
+  getTradableResources: () => request<ResourceOut[]>("/api/market/resources"),
+  getOrderBook: (resourceKey: string) => request<OrderBookOut>(`/api/market/resources/${resourceKey}/orders`),
+  getTrades: (resourceKey: string) => request<TradeOut[]>(`/api/market/resources/${resourceKey}/trades`),
+  getMyOrders: () => request<MarketOrderOut[]>("/api/market/my-orders"),
+  createOrder: (payload: CreateOrderRequest) =>
+    request<MarketOrderOut>("/api/market/orders", { method: "POST", body: JSON.stringify(payload) }),
+  cancelOrder: (orderId: number) => request<void>(`/api/market/orders/${orderId}`, { method: "DELETE" }),
 };
