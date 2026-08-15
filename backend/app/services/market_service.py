@@ -11,6 +11,7 @@ from app.models.resource import ResourceDefinition
 from app.models.trade import Trade
 from app.models.user import User
 from app.schemas.market import MarketOrderOut, OrderBookOut, TradeOut
+from app.websocket.manager import manager
 
 # --- lookups / locking helpers ----------------------------------------------
 
@@ -85,7 +86,7 @@ def _prices_cross(taker_side: str, taker_price: Decimal, maker_price: Decimal) -
     return taker_price >= maker_price if taker_side == "buy" else taker_price <= maker_price
 
 
-def _match_order(db: Session, taker: MarketOrder) -> None:
+def _match_order(db: Session, taker: MarketOrder) -> tuple[list[Trade], dict[int, MarketOrder]]:
     """Match an incoming order against resting opposite-side orders.
 
     Execution happens at the resting (maker) order's price, never the
@@ -98,9 +99,12 @@ def _match_order(db: Session, taker: MarketOrder) -> None:
     Per-fill sequence matches the TODO spec: lock both orders -> confirm
     remaining qty/reserves -> compute fill -> transfer inventory + currency
     -> deduct fee -> update remaining qty -> close filled orders -> write
-    trade -> (caller commits). WS publish is Phase 11 - not wired up yet.
+    trade -> (caller commits, then publishes WS events for what's returned
+    here - never before the commit, since Postgres is the source of truth).
     """
     candidates = _opposite_side_candidates(db, taker.resource_id, taker.side)
+    trades: list[Trade] = []
+    touched_makers: dict[int, MarketOrder] = {}
 
     for candidate in candidates:
         if taker.remaining_quantity <= 0:
@@ -151,20 +155,40 @@ def _match_order(db: Session, taker: MarketOrder) -> None:
             if order.remaining_quantity <= 0:
                 order.status = "filled"
 
-        db.add(
-            Trade(
-                resource_id=taker.resource_id,
-                buyer_id=buyer_id,
-                seller_id=seller_id,
-                buy_order_id=buy_order.id,
-                sell_order_id=sell_order.id,
-                quantity=fill_qty,
-                price=fill_price,
-                total_value=total_value,
-                fee=fee,
-            )
+        trade = Trade(
+            resource_id=taker.resource_id,
+            buyer_id=buyer_id,
+            seller_id=seller_id,
+            buy_order_id=buy_order.id,
+            sell_order_id=sell_order.id,
+            quantity=fill_qty,
+            price=fill_price,
+            total_value=total_value,
+            fee=fee,
         )
+        db.add(trade)
         db.flush()
+        trades.append(trade)
+        touched_makers[maker.id] = maker
+
+    return trades, touched_makers
+
+
+def _publish_best_prices(db: Session, resource_id: int, resource_key: str) -> None:
+    best_bid = db.execute(
+        select(MarketOrder.price)
+        .where(MarketOrder.resource_id == resource_id, MarketOrder.side == "buy", MarketOrder.status == "open")
+        .order_by(MarketOrder.price.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    best_ask = db.execute(
+        select(MarketOrder.price)
+        .where(MarketOrder.resource_id == resource_id, MarketOrder.side == "sell", MarketOrder.status == "open")
+        .order_by(MarketOrder.price.asc())
+        .limit(1)
+    ).scalar_one_or_none()
+    manager.publish(resource_key, "best_bid_updated", {"price": str(best_bid) if best_bid is not None else None})
+    manager.publish(resource_key, "best_ask_updated", {"price": str(best_ask) if best_ask is not None else None})
 
 
 # --- orders --------------------------------------------------------------
@@ -201,10 +225,23 @@ def create_order(
     db.add(order)
     db.flush()
 
-    _match_order(db, order)
+    trades, touched_makers = _match_order(db, order)
 
     db.commit()
     db.refresh(order)
+
+    # Publish only after commit - Postgres is the source of truth, and a
+    # client must never be told about a fill that isn't durably persisted.
+    manager.publish(resource.key, "order_created", MarketOrderOut.model_validate(order).model_dump(mode="json"))
+    for maker in touched_makers.values():
+        db.refresh(maker)
+        manager.publish(resource.key, "order_updated", MarketOrderOut.model_validate(maker).model_dump(mode="json"))
+    for trade in trades:
+        db.refresh(trade)
+        manager.publish(resource.key, "trade_completed", TradeOut.model_validate(trade).model_dump(mode="json"))
+    if trades:
+        _publish_best_prices(db, resource.id, resource.key)
+
     return MarketOrderOut.model_validate(order)
 
 
@@ -222,6 +259,11 @@ def cancel_order(db: Session, user_id: int, order_id: int) -> None:
 
     order.status = "cancelled"
     db.commit()
+    db.refresh(order)
+
+    resource_key = order.resource.key
+    manager.publish(resource_key, "order_cancelled", MarketOrderOut.model_validate(order).model_dump(mode="json"))
+    _publish_best_prices(db, order.resource_id, resource_key)
 
 
 def get_order_book(db: Session, resource_key: str) -> OrderBookOut:

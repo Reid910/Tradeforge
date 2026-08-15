@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -14,10 +15,13 @@ from app.core.config import settings
 from app.db.session import SessionLocal
 from app.services.machine_seed import seed_machine_definitions
 from app.services.resource_seed import seed_resources
+from app.websocket.manager import manager
+from app.websocket.router import router as market_ws_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    manager.bind_loop(asyncio.get_running_loop())
     db = SessionLocal()
     try:
         seed_resources(db)
@@ -44,3 +48,4 @@ app.include_router(mines_router, prefix="/api")
 app.include_router(inventory_router, prefix="/api")
 app.include_router(factory_router, prefix="/api")
 app.include_router(market_router, prefix="/api")
+app.include_router(market_ws_router)
