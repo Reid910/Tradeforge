@@ -79,16 +79,16 @@ Passwordless by design decision — no password field on `User` at all, not just
 
 - [x] Raw: Iron Ore, Copper Ore, Coal, Silica
 - [x] Rare: Charged Crystal, Prismatic Core (fixed drop rates — upgrades never touch rare odds)
-- [ ] Intermediate: Steel, Copper Wire, Glass
-- [ ] Finished: Electric Motor, Mining Drill, Control Module
-- [ ] Recipes:
-  - Iron Ore + Coal → Steel
-  - Copper Ore → Copper Wire
-  - Silica → Glass
-  - Steel + Copper Wire → Electric Motor
-  - Steel + Electric Motor → Mining Drill
-  - Copper Wire + Glass + Charged Crystal → Control Module
-- [ ] Mining Drills feed back into mine upgrades (closes the loop)
+- [x] Intermediate: Steel, Copper Wire, Glass
+- [x] Finished: Electric Motor, Mining Drill, Control Module
+- [x] Recipes:
+  - Iron Ore + Coal → Steel (Smelter)
+  - Copper Ore → Copper Wire (Wire Drawer)
+  - Silica → Glass (Glassworks)
+  - Steel + Copper Wire → Electric Motor (Motor Assembler)
+  - Steel + Electric Motor → Mining Drill (Drill Press)
+  - Copper Wire + Glass + Charged Crystal → Control Module (Control Fabricator)
+- [ ] Mining Drills feed back into mine upgrades (closes the loop) — **design decision needed**: `mine_service.upgrade()` is currently free (Phase 7 note: "free for now since there's no currency sink until the market exists"). Making it consume a Mining Drill is a real economy change — does upgrade cost become Mining Drill(s) only, Mining Drill + currency, or does currency (from Phase 10's market) replace this item-sink idea entirely? Left undone pending that call rather than guessed.
 
 ## Phase 6 — Node map
 

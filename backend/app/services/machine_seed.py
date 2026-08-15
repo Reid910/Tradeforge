@@ -24,6 +24,54 @@ MACHINE_SEED = [
         # the chain could never produce anything.
         inputs=[("copper_ingot", 1)],
     ),
+    dict(
+        key="smelter",
+        name="Smelter",
+        icon="🔥",
+        output_key="steel",
+        output_amount=1,
+        inputs=[("iron_ore", 1), ("coal", 1)],
+    ),
+    dict(
+        key="wire_drawer",
+        name="Wire Drawer",
+        icon="🔌",
+        output_key="copper_wire",
+        output_amount=1,
+        inputs=[("copper_ore", 1)],
+    ),
+    dict(
+        key="glassworks",
+        name="Glassworks",
+        icon="🧊",
+        output_key="glass",
+        output_amount=1,
+        inputs=[("silica", 1)],
+    ),
+    dict(
+        key="motor_assembler",
+        name="Motor Assembler",
+        icon="🧲",
+        output_key="electric_motor",
+        output_amount=1,
+        inputs=[("steel", 1), ("copper_wire", 1)],
+    ),
+    dict(
+        key="drill_press",
+        name="Drill Press",
+        icon="⚒",
+        output_key="mining_drill",
+        output_amount=1,
+        inputs=[("steel", 1), ("electric_motor", 1)],
+    ),
+    dict(
+        key="control_fabricator",
+        name="Control Fabricator",
+        icon="💠",
+        output_key="control_module",
+        output_amount=1,
+        inputs=[("copper_wire", 1), ("glass", 1), ("charged_crystal", 1)],
+    ),
 ]
 
 
