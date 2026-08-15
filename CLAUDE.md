@@ -11,6 +11,7 @@
   - `## Test plan` — what was actually verified (lint/build/migrations/manual testing), plainly stated, not padded
   - `## Known limitations` — anything genuinely not done (no automated tests, not browser-verified, etc.)
   - No "Generated with Claude Code" footer or similar attribution line.
+  - Post the whole description inside a single fenced code block, so it's copy-pasteable in one action.
 - Only actually run `gh pr create` if the GitHub CLI is authenticated and available — otherwise give the compare-branch URL plus the description text for the user to paste in.
 
 ## Verification before calling something done
